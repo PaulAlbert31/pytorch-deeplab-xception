@@ -97,16 +97,18 @@ class Trainer(object):
         self.model.train()
         tbar = tqdm(self.train_loader)
         num_img_tr = len(self.train_loader)
+        self.optimizer.zero_grad()
         for i, sample in enumerate(tbar):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
-            self.optimizer.zero_grad()
             output = self.model(image)
-            loss = self.criterion(output, target)
+            loss = self.criterion(output, target) / self.args.grad_retention
             loss.backward()
-            self.optimizer.step()
+            if i % self.args.grad_retention == 0:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
             train_loss += loss.item()
             tbar.set_description('Train loss: %.3f' % (train_loss / (i + 1)))
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
@@ -248,6 +250,8 @@ def main():
                         help='evaluuation interval (default: 1)')
     parser.add_argument('--no-val', action='store_true', default=False,
                         help='skip validation during training')
+    parser.add_argument('--grad-retention', type=int, default=1,
+                        help='Number of iterations before backprop, default=1')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
