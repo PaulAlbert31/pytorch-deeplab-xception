@@ -83,7 +83,7 @@ class ADE20KSegmentation(Dataset):
             tr.RandomHorizontalFlip(),
             tr.RandomScaleCrop(base_size=self.args.base_size, crop_size=self.args.crop_size),
             tr.RandomGaussianBlur(),
-            tr.Normalize(mean=(0.404, 0.455, 0.481), std=(1., 1., 1.)),
+            tr.Normalize(mean=(.485, .456, .406), std=(.229, .224, .225)),
             tr.ToTensor()])
 
         return composed_transforms(sample)
@@ -92,7 +92,7 @@ class ADE20KSegmentation(Dataset):
 
         composed_transforms = transforms.Compose([
             tr.FixScaleCrop(crop_size=self.args.crop_size),
-            tr.Normalize(mean=(0.404, 0.455, 0.481), std=(1., 1., 1.)),
+            tr.Normalize(mean=(.485, .456, .406), std=(.229, .224, .225)),
             tr.ToTensor()])
 
         return composed_transforms(sample)

@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python train.py --backbone resnet --lr 0.0001 --workers 4 --epochs 25 --gpu-ids 0 --checkname deeplab-resnet-ade20k --eval-interval 1 --dataset ade20k --batch-size 2 --grad-retention 8 --use-balanced-weights
+CUDA_VISIBLE_DEVICES=0 python train.py --backbone resnet --lr 0.001 --workers 4 --epochs 50 --gpu-ids 0 --checkname deeplab-resnet-ade20k --eval-interval 1 --dataset ade20k --batch-size 2 --grad-retention 8 --use-balanced-weights
