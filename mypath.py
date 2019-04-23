@@ -6,9 +6,11 @@ class Path(object):
         elif dataset == 'sbd':
             return '/data/semseg/samples/benchmark_RELEASE/'  # folder that contains dataset/.
         elif dataset == 'cityscapes':
-            return '/data/semseg/samples/'     # foler that contains leftImg8bit/
+            return '/data/semseg/samples/'     # folder that contains leftImg8bit/
         elif dataset == 'coco':
             return '/data/semseg/samples/coco/'
+        elif dataset == 'ade20k':
+            return '/data/semseg/samples/ADEChallengeData2016/' # download from data.csail.mit.edu/places/ADEchallenge/ADEChallengeData2016.zip
         else:
             print('Dataset {} not available.'.format(dataset))
             raise NotImplementedError

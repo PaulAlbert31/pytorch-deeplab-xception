@@ -53,10 +53,12 @@ class Trainer(object):
                 weight = np.load(classes_weights_path)
             else:
                 weight = calculate_weigths_labels(args.dataset, self.train_loader, self.nclass)
+                np.save(os.path.join(Path.db_root_dir(args.dataset), args.dataset+'_classes_weights.npy'), weight)
             weight = torch.from_numpy(weight.astype(np.float32))
         else:
             weight = None
-        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(mode=args.loss_type)
+
+        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda, ignore_index=args.ignore_index).build_loss(mode=args.loss_type)
         self.model, self.optimizer = model, optimizer
         
         # Define Evaluator
@@ -187,7 +189,7 @@ def main():
     parser.add_argument('--out-stride', type=int, default=16,
                         help='network output stride (default: 8)')
     parser.add_argument('--dataset', type=str, default='pascal',
-                        choices=['pascal', 'coco', 'cityscapes'],
+                        choices=['pascal', 'coco', 'cityscapes', 'ade20k'],
                         help='dataset name (default: pascal)')
     parser.add_argument('--use-sbd', action='store_true', default=False,
                         help='whether to use SBD dataset')
@@ -289,7 +291,9 @@ def main():
             'pascal': 0.007,
         }
         args.lr = lrs[args.dataset.lower()] / (4 * len(args.gpu_ids)) * args.batch_size
-
+    args.ignore_index = 255
+    if args.dataset == "ade20k":
+        args.ignore_index = 0
 
     if args.checkname is None:
         args.checkname = 'deeplab-'+str(args.backbone)
