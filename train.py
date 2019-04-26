@@ -13,6 +13,7 @@ from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
+from convcrf import convcrf
 
 class Trainer(object):
     def __init__(self, args):
@@ -60,6 +61,12 @@ class Trainer(object):
 
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda, ignore_index=args.ignore_index).build_loss(mode=args.loss_type)
         self.model, self.optimizer = model, optimizer
+
+        config = convcrf.default_conf
+        config['filter_size'] = 7
+        config['col_feats']['schan'] = 0.1
+
+        self.convcrf = convcrf.GaussCRF(conf=config, shape=(args.crop_size,args.crop_size), nclasses=self.nclass)
         
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)
@@ -106,7 +113,13 @@ class Trainer(object):
                 image, target = image.cuda(), target.cuda()
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
             output = self.model(image)
+            print(output.shape)
+            print(image.shape)
             loss = self.criterion(output, target) / self.args.grad_retention
+            if args.crf_loss:
+                crf_out = self.convcrf.forward(unary=output, image=image)
+                crf_loss = torch.nn.functional.kl_div(crf_out, output)
+                loss += crf_loss/ self.args.grad_retention
             loss.backward()
             if i % self.args.grad_retention == 0:
                 self.optimizer.step()
@@ -254,6 +267,8 @@ def main():
                         help='skip validation during training')
     parser.add_argument('--grad-retention', type=int, default=1,
                         help='Number of iterations before backprop, default=1')
+    parser.add_argument('--crf-loss', action='store_true', default=False,
+                        help='Add the Conv Crf reg loss')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
