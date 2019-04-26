@@ -14,7 +14,9 @@ from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 from convcrf import convcrf
-
+from torch.autograd import Variable
+import warnings
+warnings.simplefilter('ignore')
 class Trainer(object):
     def __init__(self, args):
         self.args = args
@@ -66,7 +68,11 @@ class Trainer(object):
         config['filter_size'] = 7
         config['col_feats']['schan'] = 0.1
 
-        self.convcrf = convcrf.GaussCRF(conf=config, shape=(args.crop_size,args.crop_size), nclasses=self.nclass)
+        _shape = int(args.crop_size/4)
+        if args.crop_size/4 != int(args.crop_size/4):
+            _shape += 1
+        
+        self.convcrf = convcrf.GaussCRF(conf=config, shape=(_shape,_shape), nclasses=self.nclass)
         
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)
@@ -79,6 +85,7 @@ class Trainer(object):
             self.model = torch.nn.DataParallel(self.model, device_ids=self.args.gpu_ids)
             patch_replication_callback(self.model)
             self.model = self.model.cuda()
+            self.convcrf.cuda()
 
         # Resuming checkpoint
         self.best_pred = 0.0
@@ -113,13 +120,13 @@ class Trainer(object):
                 image, target = image.cuda(), target.cuda()
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
             output = self.model(image)
-            print(output.shape)
-            print(image.shape)
-            loss = self.criterion(output, target) / self.args.grad_retention
-            if args.crf_loss:
-                crf_out = self.convcrf.forward(unary=output, image=image)
+            output_interp = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
+            loss = self.criterion(output_interp, target) / self.args.grad_retention
+            if self.args.crf_loss:
+                #crf_out = self.convcrf.forward(unary=output_interp, img=image)
+                crf_out = self.convcrf.forward(unary=output, img=F.interpolate(image, size=output.size()[2:], mode='bilinear', align_corners=True))
                 crf_loss = torch.nn.functional.kl_div(crf_out, output)
-                loss += crf_loss/ self.args.grad_retention
+                loss += - crf_loss.item() / self.args.grad_retention
             loss.backward()
             if i % self.args.grad_retention == 0:
                 self.optimizer.step()
@@ -131,7 +138,7 @@ class Trainer(object):
             # Show 10 * 3 inference results each epoch
             if i % (num_img_tr // 10) == 0:
                 global_step = i + num_img_tr * epoch
-                self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+                self.summary.visualize_image(self.writer, self.args.dataset, image, target, output_interp, global_step)
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
         print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
@@ -159,6 +166,7 @@ class Trainer(object):
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
                 output = self.model(image)
+                output = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
             loss = self.criterion(output, target)
             test_loss += loss.item()
             tbar.set_description('Test loss: %.3f' % (test_loss / (i + 1)))

@@ -205,7 +205,7 @@ class GaussCRF(nn.Module):
 
         self.CRF.clean_filters()
         
-        return predictions
+        return prediction
 
     def _create_mesh(self, requires_grad=False):
         hcord_range = [range(s) for s in self.shape]
@@ -352,9 +352,9 @@ class MessagePassingCol():
                                                       kernel_size=self.blur,
                                                       padding=(pad_0, pad_1),
                                                       count_include_pad=False)
-
             npixels = [math.ceil(self.npixels[0] / self.blur),
                        math.ceil(self.npixels[1] / self.blur)]
+
             assert(npixels[0] == features.shape[2])
             assert(npixels[1] == features.shape[3])
         else:
