@@ -64,16 +64,6 @@ class Trainer(object):
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda, ignore_index=args.ignore_index).build_loss(mode=args.loss_type)
         self.model, self.optimizer = model, optimizer
 
-        config = convcrf.default_conf
-        config['filter_size'] = 7
-        config['col_feats']['schan'] = 0.1
-
-        _shape = int(args.crop_size/4)
-        if args.crop_size/4 != int(args.crop_size/4):
-            _shape += 1
-        
-        self.convcrf = convcrf.GaussCRF(conf=config, shape=(_shape,_shape), nclasses=self.nclass)
-        
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)
         # Define lr scheduler
@@ -85,7 +75,19 @@ class Trainer(object):
             self.model = torch.nn.DataParallel(self.model, device_ids=self.args.gpu_ids)
             patch_replication_callback(self.model)
             self.model = self.model.cuda()
+
+        if args.crf_loss:
+            _shape = int(args.crop_size/4)
+            if args.crop_size/4 != int(args.crop_size/4):
+                _shape += 1
+            
+            config = convcrf.default_conf
+            config['filter_size'] = 7
+            config['col_feats']['schan'] = 0.1
+            
+            self.convcrf = convcrf.GaussCRF(conf=config, shape=(_shape,_shape), nclasses=self.nclass)
             self.convcrf.cuda()
+                                                                                                                                
 
         # Resuming checkpoint
         self.best_pred = 0.0
@@ -123,8 +125,7 @@ class Trainer(object):
             output_interp = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
             loss = self.criterion(output_interp, target) / self.args.grad_retention
             if self.args.crf_loss:
-                #crf_out = self.convcrf.forward(unary=output_interp, img=image)
-                crf_out = self.convcrf.forward(unary=output, img=F.interpolate(image, size=output.size()[2:], mode='bilinear', align_corners=True))
+                crf_out = self.convcrf.forward(unary=output, img=F.interpolate(image, size=output.size()[2:], mode='bilinear', align_corners=True))                                        
                 crf_loss = torch.nn.functional.kl_div(crf_out, output)
                 loss += - crf_loss.item() / self.args.grad_retention
             loss.backward()
@@ -166,7 +167,7 @@ class Trainer(object):
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
                 output = self.model(image)
-                output = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
+            output = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
             loss = self.criterion(output, target)
             test_loss += loss.item()
             tbar.set_description('Test loss: %.3f' % (test_loss / (i + 1)))
