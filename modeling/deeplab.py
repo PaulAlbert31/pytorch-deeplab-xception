@@ -22,8 +22,21 @@ class DeepLab(nn.Module):
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
         self.decoder = build_decoder(num_classes, backbone, BatchNorm)
+        '''
+        self.crf_loss = crf_loss
         
-        
+        if self.crf_loss:
+            _shape = int(crop_size/4)
+            if crop_size/4 != int(crop_size/4):
+                _shape += 1
+                
+            config = convcrf.default_conf
+            config['filter_size'] = 7
+            config['col_feats']['schan'] = 0.1
+            config['trainable'] = True
+            
+            self.convcrf = convcrf.GaussCRF(conf=config, shape=(_shape,_shape), nclasses=num_classes)
+        '''
         if freeze_bn:
             self.freeze_bn()
 
@@ -31,7 +44,13 @@ class DeepLab(nn.Module):
         x, low_level_feat = self.backbone(input)
         x = self.aspp(x)
         x = self.decoder(x, low_level_feat)
-        return x
+        '''
+        if self.crf_loss:
+            with torch.no_grad():
+                crf_out = self.convcrf.forward(unary=x, img=F.interpolate(input, size=x.size()[2:], mode='bilinear', align_corners=True))    
+            return x, crf_out
+        '''
+        return x, None
 
     def freeze_bn(self):
         for m in self.modules():

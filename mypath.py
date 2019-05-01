@@ -3,6 +3,8 @@ class Path(object):
     def db_root_dir(dataset):
         if dataset == 'pascal':
             return '/data/semseg/samples/VOCdevkit/VOC2012/'  # folder that contains VOCdevkit/.
+        if dataset == 'pascal-scribbles':
+            return '/data/semseg/samples/VOCdevkit/VOC2012/pascal_scribble/' # contains .png scribble annotations
         elif dataset == 'sbd':
             return '/data/semseg/samples/benchmark_RELEASE/'  # folder that contains dataset/.
         elif dataset == 'cityscapes':
