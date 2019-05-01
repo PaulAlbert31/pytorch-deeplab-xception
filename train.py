@@ -17,6 +17,7 @@ from convcrf import convcrf
 from torch.autograd import Variable
 import warnings
 warnings.simplefilter('ignore')
+
 class Trainer(object):
     def __init__(self, args):
         self.args = args
@@ -37,7 +38,9 @@ class Trainer(object):
                         backbone=args.backbone,
                         output_stride=args.out_stride,
                         sync_bn=args.sync_bn,
-                        freeze_bn=args.freeze_bn)
+                        freeze_bn=args.freeze_bn,
+                        crop_size=args.crop_size,
+                        crf_loss=args.crf_loss)
 
         train_params = [{'params': model.get_1x_lr_params(), 'lr': args.lr},
                         {'params': model.get_10x_lr_params(), 'lr': args.lr * 10}]
@@ -80,14 +83,14 @@ class Trainer(object):
             _shape = int(args.crop_size/4)
             if args.crop_size/4 != int(args.crop_size/4):
                 _shape += 1
-            
+        
             config = convcrf.default_conf
             config['filter_size'] = 7
             config['col_feats']['schan'] = 0.1
+            config['trainable'] = True
             
             self.convcrf = convcrf.GaussCRF(conf=config, shape=(_shape,_shape), nclasses=self.nclass)
             self.convcrf.cuda()
-                                                                                                                                
 
         # Resuming checkpoint
         self.best_pred = 0.0
@@ -121,13 +124,17 @@ class Trainer(object):
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             self.scheduler(self.optimizer, i, epoch, self.best_pred)
-            output = self.model(image)
+            output, crf_out = self.model(image)
             output_interp = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
             loss = self.criterion(output_interp, target) / self.args.grad_retention
             if self.args.crf_loss:
-                crf_out = self.convcrf.forward(unary=output, img=F.interpolate(image, size=output.size()[2:], mode='bilinear', align_corners=True))                                        
-                crf_loss = torch.nn.functional.kl_div(crf_out, output)
-                loss += - crf_loss.item() / self.args.grad_retention
+                #output = torch.log_softmax(output, dim=1)
+                #with torch.no_grad():
+                crf_out = self.convcrf.forward(unary=output, img=F.interpolate(image, size=output.size()[2:], mode='bilinear', align_corners=True))                
+                crf_loss = torch.nn.functional.kl_div(output, crf_out) / self.args.grad_retention #torch.nn.functional.kl_div(output, crf_out)
+                crf_loss.backward()
+                print(self.convcrf.CRF.grad)
+                loss += crf_loss 
             loss.backward()
             if i % self.args.grad_retention == 0:
                 self.optimizer.step()
@@ -166,7 +173,7 @@ class Trainer(object):
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
-                output = self.model(image)
+                output, _ = self.model(image)
             output = F.interpolate(output, size=image.size()[2:], mode='bilinear', align_corners=True)
             loss = self.criterion(output, target)
             test_loss += loss.item()
@@ -278,6 +285,8 @@ def main():
                         help='Number of iterations before backprop, default=1')
     parser.add_argument('--crf-loss', action='store_true', default=False,
                         help='Add the Conv Crf reg loss')
+    parser.add_argument('--scribbles', action='store_true', default=False,
+                        help='Use scribble annotations, only for VOC2012')
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()

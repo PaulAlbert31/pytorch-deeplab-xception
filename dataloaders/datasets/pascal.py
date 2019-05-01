@@ -17,17 +17,21 @@ class VOCSegmentation(Dataset):
                  args,
                  base_dir=Path.db_root_dir('pascal'),
                  split='train',
+                 scribble_dir=Path.db_root_dir('pascal-scribbles'),
                  ):
         """
         :param base_dir: path to VOC dataset directory
         :param split: train/val
         :param transform: transform to apply
+        :param scribles: whether to use scribble annotations
         """
         super().__init__()
         self._base_dir = base_dir
+        self._scribble_dir = scribble_dir
         self._image_dir = os.path.join(self._base_dir, 'JPEGImages')
         self._cat_dir = os.path.join(self._base_dir, 'SegmentationClass')
-
+        if args.scribbles and split == 'train':
+            self._cat_dir = self._scribble_dir
         if isinstance(split, str):
             self.split = [split]
         else:
@@ -43,9 +47,12 @@ class VOCSegmentation(Dataset):
         self.categories = []
 
         for splt in self.split:
-            with open(os.path.join(os.path.join(_splits_dir, splt + '.txt')), "r") as f:
-                lines = f.read().splitlines()
-
+            if args.scribbles:
+                with open(os.path.join(os.path.join(_splits_dir, splt + '_id.txt')), "r") as f:
+                    lines = f.read().splitlines()
+            else:
+                with open(os.path.join(os.path.join(_splits_dir, splt + '.txt')), "r") as f:
+                    lines = f.read().splitlines()
             for ii, line in enumerate(lines):
                 _image = os.path.join(self._image_dir, line + ".jpg")
                 _cat = os.path.join(self._cat_dir, line + ".png")
